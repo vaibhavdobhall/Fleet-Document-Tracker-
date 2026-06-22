@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { supabase } from '@/lib/supabase';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,48 +83,23 @@ export default function AdminDashboard() {
     }
 
     try {
-      if (!supabase) {
-        showToast('Supabase is not configured. Add your credentials to .env.local', 'error');
-        setSubmitting(false);
-        return;
-      }
-
-      // 1. Insert (or find) the client
-      const { data: client, error: clientError } = await supabase
-        .from('Clients')
-        .insert({ name: clientName.trim(), whatsapp_number: whatsappNumber.trim() || null })
-        .select('id')
-        .single();
-
-      if (clientError) {
-        showToast(`Failed to create client: ${clientError.message}`, 'error');
-        setSubmitting(false);
-        return;
-      }
-
-      // 2. Insert the vehicle linked to the client
-      const { data: vehicle, error: vehicleError } = await supabase
-        .from('Vehicles')
-        .insert({ client_id: client.id, vehicle_number: vehicleNumber.trim().toUpperCase() })
-        .select('id')
-        .single();
-
-      if (vehicleError) {
-        showToast(`Failed to create vehicle: ${vehicleError.message}`, 'error');
-        setSubmitting(false);
-        return;
-      }
-
-      // 3. Insert the document linked to the vehicle
-      const { error: docError } = await supabase.from('Documents').insert({
-        vehicle_id: vehicle.id,
-        document_type: documentType,
-        expiry_date: expiryDate,
-        status: new Date(expiryDate) >= new Date() ? 'Active' : 'Expired',
+      // Call the server-side API which handles Supabase inserts + WhatsApp confirmation
+      const res = await fetch('/api/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: clientName.trim(),
+          whatsappNumber: whatsappNumber.trim() || undefined,
+          vehicleNumber: vehicleNumber.trim(),
+          documentType,
+          expiryDate,
+        }),
       });
 
-      if (docError) {
-        showToast(`Failed to create document: ${docError.message}`, 'error');
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.error || 'Failed to save. Please try again.', 'error');
         setSubmitting(false);
         return;
       }
